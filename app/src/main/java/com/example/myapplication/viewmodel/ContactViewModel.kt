@@ -1,74 +1,111 @@
 package com.example.myapplication.ViewModel
 
 import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.LiveData
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.ContactDatabase
 import com.example.myapplication.data.ContactEntity
-import com.example.myapplication.data.ContactWithPhones
 import com.example.myapplication.repository.ContactRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 class ContactViewModel(
     application: Application
 ) : AndroidViewModel(application) {
 
-    private val repository: ContactRepository
+    private val repository = ContactRepository(
+        ContactDatabase.getDatabase(application)
+    )
 
-    val allContacts: LiveData<List<ContactWithPhones>>
+    val allContacts = repository.allContacts.asLiveData()
 
-    init {
-        val database = ContactDatabase.getDatabase(application)
+    var isSaving by mutableStateOf(false)
+        private set
 
-        repository = ContactRepository(database)
+    var errorMessage by mutableStateOf<String?>(null)
+        private set
 
-        allContacts = repository.allContacts.asLiveData()
+    fun clearError() {
+        errorMessage = null
     }
 
-    // Thêm liên hệ
-    fun insert(name: String, numbers: List<String>) {
-        val validNumbers = cleanNumbers(numbers)
-
-        if (name.isBlank() || validNumbers.isEmpty()) return
-
-        viewModelScope.launch {
-            val contact = ContactEntity(
-                name = name.trim()
-            )
-
-            repository.insert(contact, validNumbers)
-        }
-    }
-
-    // Sửa liên hệ
-    fun update(
-        contact: ContactEntity,
+    fun insert(
         name: String,
-        numbers: List<String>
+        numbers: List<String>,
+        onSuccess: () -> Unit = {}
     ) {
         val validNumbers = cleanNumbers(numbers)
 
-        if (name.isBlank() || validNumbers.isEmpty()) return
+        if (name.isBlank() || validNumbers.isEmpty()) {
+            errorMessage = "Nhập tên và ít nhất một số điện thoại"
+            return
+        }
 
-        viewModelScope.launch {
-            val updatedContact = contact.copy(
-                name = name.trim()
+        save(onSuccess) {
+            repository.insert(
+                ContactEntity(name = name.trim()),
+                validNumbers
             )
-
-            repository.update(updatedContact, validNumbers)
         }
     }
 
-    // Xóa liên hệ
-    fun delete(contact: ContactEntity) {
-        viewModelScope.launch {
+    fun update(
+        contact: ContactEntity,
+        name: String,
+        numbers: List<String>,
+        onSuccess: () -> Unit = {}
+    ) {
+        val validNumbers = cleanNumbers(numbers)
+
+        if (name.isBlank() || validNumbers.isEmpty()) {
+            errorMessage = "Nhập tên và ít nhất một số điện thoại"
+            return
+        }
+
+        save(onSuccess) {
+            repository.update(
+                contact.copy(name = name.trim()),
+                validNumbers
+            )
+        }
+    }
+
+    fun delete(
+        contact: ContactEntity,
+        onSuccess: () -> Unit = {}
+    ) {
+        save(onSuccess) {
             repository.delete(contact)
         }
     }
 
-    // Bỏ khoảng trắng, số trống và số trùng
+    private fun save(
+        onSuccess: () -> Unit,
+        action: suspend () -> Unit
+    ) {
+        if (isSaving) return
+
+        isSaving = true
+        errorMessage = null
+
+        viewModelScope.launch {
+            try {
+                action()
+                onSuccess()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                errorMessage = "Không thể lưu dữ liệu. Vui lòng thử lại."
+            } finally {
+                isSaving = false
+            }
+        }
+    }
+
     private fun cleanNumbers(numbers: List<String>): List<String> {
         return numbers
             .map { it.trim() }

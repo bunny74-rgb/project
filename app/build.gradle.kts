@@ -66,4 +66,6 @@ dependencies {
 
     // Quan sát LiveData từ Compose
     implementation(libs.androidx.compose.runtime.livedata)
+
+    implementation(libs.androidx.navigation.compose)
 }

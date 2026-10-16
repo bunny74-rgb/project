@@ -27,7 +27,8 @@ import com.example.myapplication.ViewModel.ContactViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactScreen(
-    contactViewModel: ContactViewModel = viewModel()
+    contactViewModel: ContactViewModel,
+    onContactClick: (String) -> Unit
 ) {
     // Quan sát dữ liệu từ Room qua LiveData
     val contacts by contactViewModel.allContacts
@@ -61,7 +62,8 @@ fun ContactScreen(
             ContactList(
                 contacts = contacts,
                 onContactClick = {
-                    // Bước sau sẽ mở hộp thoại sửa/xóa
+                        item ->
+                    onContactClick(item.contact.id)
                 },
                 modifier = Modifier.weight(1f)
             )
@@ -87,8 +89,11 @@ fun ContactScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-
+            contactViewModel.errorMessage?.let { message ->
+                Text(text = message)
+            }
             Button(
+
                 onClick = {
                     val numbers = phoneInput
                         .split(",")
@@ -98,16 +103,17 @@ fun ContactScreen(
                     if (nameInput.isNotBlank() && numbers.isNotEmpty()) {
                         contactViewModel.insert(
                             name = nameInput,
-                            numbers = numbers
+                            numbers = numbers,
+                            onSuccess = {
+                                nameInput = ""
+                                phoneInput = ""
+                            }
                         )
-
-                        nameInput = ""
-                        phoneInput = ""
                     }
                 },
-                enabled = nameInput.isNotBlank() &&
-                        phoneInput.isNotBlank(),
-                modifier = Modifier.padding(bottom = 16.dp)
+                enabled = !contactViewModel.isSaving &&
+                        nameInput.isNotBlank() &&
+                        phoneInput.isNotBlank()
             ) {
                 Text("Thêm liên hệ")
             }
