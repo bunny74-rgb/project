@@ -9,7 +9,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.data.ContactWithPhones
-
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactDetailScreen(
@@ -18,10 +24,28 @@ fun ContactDetailScreen(
     errorMessage: String?,
     onBack: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    isExporting: Boolean,
+    onExport: () -> Unit
 ) {
     var showDeleteDialog by rememberSaveable(item.contact.id) {
         mutableStateOf(false)
+    }
+
+    val context = LocalContext.current
+
+    val writePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            onExport()
+        } else {
+            Toast.makeText(
+                context,
+                "Chưa được cấp quyền ghi danh bạ",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     Scaffold(
@@ -74,6 +98,28 @@ fun ContactDetailScreen(
                 ) {
                     Text("Xóa")
                 }
+            }
+            Button(
+                enabled = !isSaving && !isExporting,
+                onClick = {
+                    val granted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.WRITE_CONTACTS
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (granted) {
+                        onExport()
+                    } else {
+                        writePermissionLauncher.launch(
+                            Manifest.permission.WRITE_CONTACTS
+                        )
+                    }
+                }
+            ) {
+                Text(
+                    if (isExporting) "Đang xuất..."
+                    else "Xuất sang danh bạ"
+                )
             }
 
             errorMessage?.let {

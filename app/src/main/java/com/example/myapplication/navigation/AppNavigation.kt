@@ -1,6 +1,7 @@
 package com.example.myapplication.navigation
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -10,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -25,17 +27,18 @@ import com.example.myapplication.component.ContactScreen
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    val context = LocalContext.current
 
-    // Tạo bên ngoài NavHost để các màn hình dùng chung
+    // Các màn hình dùng chung ViewModel
     val contactViewModel: ContactViewModel = viewModel()
 
-    // null: chưa nhận dữ liệu đầu tiên từ Room
     val contacts by contactViewModel.allContacts.observeAsState()
 
     NavHost(
         navController = navController,
         startDestination = "contacts"
     ) {
+        // Màn hình danh sách
         composable("contacts") {
             ContactScreen(
                 contactViewModel = contactViewModel,
@@ -51,6 +54,7 @@ fun AppNavigation() {
             )
         }
 
+        // Màn hình chi tiết
         composable(
             route = "detail/{id}",
             arguments = listOf(
@@ -65,16 +69,20 @@ fun AppNavigation() {
             if (item == null) {
                 ContactUnavailable(
                     loading = contacts == null,
-                    onBack = { navController.popBackStack() }
+                    onBack = {
+                        navController.popBackStack()
+                    }
                 )
             } else {
                 ContactDetailScreen(
                     item = item,
                     isSaving = contactViewModel.isSaving,
                     errorMessage = contactViewModel.errorMessage,
+
                     onBack = {
                         navController.popBackStack()
                     },
+
                     onEdit = {
                         contactViewModel.clearError()
 
@@ -84,6 +92,7 @@ fun AppNavigation() {
                             launchSingleTop = true
                         }
                     },
+
                     onDelete = {
                         contactViewModel.delete(
                             contact = item.contact,
@@ -96,11 +105,27 @@ fun AppNavigation() {
                                 }
                             }
                         )
+                    },
+
+                    isExporting = contactViewModel.isExporting,
+
+                    onExport = {
+                        contactViewModel.exportToSystemContacts(
+                            item = item,
+                            onSuccess = {
+                                Toast.makeText(
+                                    context,
+                                    "Đã xuất sang danh bạ hệ thống",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        )
                     }
                 )
             }
         }
 
+        // Màn hình chỉnh sửa
         composable(
             route = "edit/{id}",
             arguments = listOf(
@@ -115,16 +140,20 @@ fun AppNavigation() {
             if (item == null) {
                 ContactUnavailable(
                     loading = contacts == null,
-                    onBack = { navController.popBackStack() }
+                    onBack = {
+                        navController.popBackStack()
+                    }
                 )
             } else {
                 ContactEditScreen(
                     item = item,
                     isSaving = contactViewModel.isSaving,
                     errorMessage = contactViewModel.errorMessage,
+
                     onBack = {
                         navController.popBackStack()
                     },
+
                     onSave = { name, numbers ->
                         contactViewModel.update(
                             contact = item.contact,
@@ -154,8 +183,11 @@ private fun ContactUnavailable(
             .padding(16.dp)
     ) {
         Text(
-            if (loading) "Đang tải dữ liệu..."
-            else "Liên hệ không còn tồn tại."
+            if (loading) {
+                "Đang tải dữ liệu..."
+            } else {
+                "Liên hệ không còn tồn tại."
+            }
         )
 
         TextButton(onClick = onBack) {

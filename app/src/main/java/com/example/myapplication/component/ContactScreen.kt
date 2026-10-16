@@ -23,6 +23,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.ViewModel.ContactViewModel
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +50,21 @@ fun ContactScreen(
 
     var phoneInput by rememberSaveable {
         mutableStateOf("")
+    }
+    val context = LocalContext.current
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            contactViewModel.readSystemContacts()
+        } else {
+            Toast.makeText(
+                context,
+                "Bạn chưa cấp quyền đọc danh bạ",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     Scaffold(
@@ -59,6 +84,51 @@ fun ContactScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Button(
+                enabled = !contactViewModel.isReadingContacts,
+                onClick = {
+                    val granted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.READ_CONTACTS
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (granted) {
+                        contactViewModel.readSystemContacts()
+                    } else {
+                        permissionLauncher.launch(
+                            Manifest.permission.READ_CONTACTS
+                        )
+                    }
+                }
+            ) {
+                Text("Đọc danh bạ hệ thống")
+            }
+            Text(contactViewModel.systemContactsMessage)
+
+            if (contactViewModel.systemContacts.isNotEmpty()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 180.dp)
+                ) {
+                    items(
+                        items = contactViewModel.systemContacts,
+                        key = { it.id }
+                    ) { contact ->
+                        Column(
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        ) {
+                            Text("Tên: ${contact.name}")
+
+                            contact.numbers.forEach { number ->
+                                Text(number)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text("Danh bạ đã lưu trong ứng dụng")
             ContactList(
                 contacts = contacts,
                 onContactClick = {
