@@ -18,12 +18,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.myapplication.repository.SystemContactWriter
 import com.example.myapplication.data.ContactWithPhones
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.ContactsContract
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 class ContactViewModel(
     application: Application
 ) : AndroidViewModel(application) {
 
     private val repository = ContactRepository(
-        ContactDatabase.getDatabase(application)
+        database = ContactDatabase.getDatabase(application),
+        context = application
     )
 
     val allContacts = repository.allContacts.asLiveData()
@@ -103,8 +110,23 @@ class ContactViewModel(
                 onSuccess()
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: SecurityException) {
+                android.util.Log.e(
+                    "ContactSave",
+                    "Thiếu quyền truy cập danh bạ",
+                    e
+                )
+
+                errorMessage = "Cần cấp quyền đọc và ghi danh bạ"
             } catch (e: Exception) {
-                errorMessage = "Không thể lưu dữ liệu. Vui lòng thử lại."
+                android.util.Log.e(
+                    "ContactSave",
+                    "Lưu liên hệ thất bại",
+                    e
+                )
+
+                errorMessage =
+                    "Không thể lưu dữ liệu. Vui lòng thử lại."
             } finally {
                 isSaving = false
             }
@@ -181,12 +203,15 @@ class ContactViewModel(
                     .filter { it.isNotBlank() }
                     .distinct()
 
-                withContext(Dispatchers.IO) {
-                    systemContactWriter.insertContact(
-                        name = item.contact.name,
-                        numbers = numbers
-                    )
+                require(item.contact.name.isNotBlank() && numbers.isNotEmpty()) {
+                    "Liên hệ phải có tên và số điện thoại"
                 }
+
+                repository.exportToSystem(
+                    contact = item.contact,
+                    numbers = numbers
+
+                )
 
                 onSuccess()
             } catch (e: CancellationException) {
@@ -194,13 +219,115 @@ class ContactViewModel(
             } catch (e: SecurityException) {
                 errorMessage = "Chưa có quyền ghi danh bạ"
             } catch (e: Exception) {
-                errorMessage = "Không thể xuất liên hệ sang danh bạ"
+                errorMessage =
+                    "Không thể xuất hoặc cập nhật liên hệ hệ thống"
             } finally {
                 isExporting = false
             }
         }
     }
+    var syncMessage by mutableStateOf(
+        "Chưa bật đồng bộ tự động"
+    )
+        private set
+
+    private val contactResolver =
+        application.contentResolver
+
+    private var automaticSyncEnabled = false
+    private var observerRegistered = false
+
+    private var syncRequested = false
+    private var syncJob: Job? = null
+
+    private val contactObserver = object : ContentObserver(
+        Handler(Looper.getMainLooper())
+    ) {
+        override fun onChange(selfChange: Boolean) {
+            requestAutomaticSync()
+        }
+    }
+
+    fun startAutomaticSync() {
+        try {
+            if (!observerRegistered) {
+                contactResolver.registerContentObserver(
+                    ContactsContract.AUTHORITY_URI,
+                    true,
+                    contactObserver
+                )
+
+                observerRegistered = true
+            }
+
+            automaticSyncEnabled = true
+
+            // Mỗi lần quay lại app đều kiểm tra lại dữ liệu.
+            requestAutomaticSync()
+        } catch (e: SecurityException) {
+            stopAutomaticSync()
+            syncMessage = "Cần cấp quyền đọc và ghi danh bạ"
+        }
+    }
+
+    fun stopAutomaticSync() {
+        automaticSyncEnabled = false
+        syncRequested = false
+
+        if (observerRegistered) {
+            contactResolver.unregisterContentObserver(
+                contactObserver
+            )
+
+            observerRegistered = false
+        }
+    }
+
+    private fun requestAutomaticSync() {
+        if (!automaticSyncEnabled) return
+
+        syncRequested = true
+
+        // Nếu đang đồng bộ, yêu cầu mới sẽ được xử lý ở vòng sau.
+        if (syncJob?.isActive == true) return
+
+        syncJob = viewModelScope.launch {
+            while (automaticSyncEnabled && syncRequested) {
+                syncRequested = false
+
+                // Gom các thông báo phát sinh gần nhau.
+                delay(400)
+
+                if (!automaticSyncEnabled) break
+
+                syncMessage = "Đang đồng bộ..."
+
+                try {
+                    repository.synchronize()
+
+                    syncMessage = "Đã đồng bộ danh bạ"
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: SecurityException) {
+                    stopAutomaticSync()
+
+                    syncMessage =
+                        "Đồng bộ tạm dừng: thiếu quyền danh bạ"
+                } catch (e: Exception) {
+                    syncMessage =
+                        "Đồng bộ chưa thành công. " +
+                                "Ứng dụng sẽ kiểm tra lại khi bạn mở lại."
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        stopAutomaticSync()
+        super.onCleared()
+    }
 
 }
+
 
 

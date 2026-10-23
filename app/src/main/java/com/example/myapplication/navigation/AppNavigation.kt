@@ -1,7 +1,7 @@
 package com.example.myapplication.navigation
 
 import android.net.Uri
-import android.widget.Toast
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -11,9 +11,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -25,13 +24,12 @@ import com.example.myapplication.component.ContactEditScreen
 import com.example.myapplication.component.ContactScreen
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    contactViewModel: ContactViewModel
+) {
     val navController = rememberNavController()
-    val context = LocalContext.current
 
-    // Các màn hình dùng chung ViewModel
-    val contactViewModel: ContactViewModel = viewModel()
-
+    // null nghĩa là Room chưa trả dữ liệu lần đầu.
     val contacts by contactViewModel.allContacts.observeAsState()
 
     NavHost(
@@ -64,7 +62,10 @@ fun AppNavigation() {
             )
         ) { entry ->
             val id = entry.arguments?.getString("id")
-            val item = contacts?.find { it.contact.id == id }
+
+            val item = contacts?.find {
+                it.contact.id == id
+            }
 
             if (item == null) {
                 ContactUnavailable(
@@ -97,7 +98,9 @@ fun AppNavigation() {
                         contactViewModel.delete(
                             contact = item.contact,
                             onSuccess = {
-                                if (navController.currentBackStackEntry == entry) {
+                                if (
+                                    navController.currentBackStackEntry == entry
+                                ) {
                                     navController.popBackStack(
                                         route = "contacts",
                                         inclusive = false
@@ -106,21 +109,6 @@ fun AppNavigation() {
                             }
                         )
                     },
-
-                    isExporting = contactViewModel.isExporting,
-
-                    onExport = {
-                        contactViewModel.exportToSystemContacts(
-                            item = item,
-                            onSuccess = {
-                                Toast.makeText(
-                                    context,
-                                    "Đã xuất sang danh bạ hệ thống",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        )
-                    }
                 )
             }
         }
@@ -135,7 +123,10 @@ fun AppNavigation() {
             )
         ) { entry ->
             val id = entry.arguments?.getString("id")
-            val item = contacts?.find { it.contact.id == id }
+
+            val item = contacts?.find {
+                it.contact.id == id
+            }
 
             if (item == null) {
                 ContactUnavailable(
@@ -160,7 +151,9 @@ fun AppNavigation() {
                             name = name,
                             numbers = numbers,
                             onSuccess = {
-                                if (navController.currentBackStackEntry == entry) {
+                                if (
+                                    navController.currentBackStackEntry == entry
+                                ) {
                                     navController.popBackStack()
                                 }
                             }
@@ -183,7 +176,7 @@ private fun ContactUnavailable(
             .padding(16.dp)
     ) {
         Text(
-            if (loading) {
+            text = if (loading) {
                 "Đang tải dữ liệu..."
             } else {
                 "Liên hệ không còn tồn tại."
